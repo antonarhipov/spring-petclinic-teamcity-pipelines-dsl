@@ -1,8 +1,6 @@
 import jetbrains.buildServer.configs.kotlin.v2018_2.*
-//import jetbrains.buildServer.configs.kotlin.v2018_2.buildFeatures.Swabra
-//import jetbrains.buildServer.configs.kotlin.v2018_2.buildFeatures.swabra
 import jetbrains.buildServer.configs.kotlin.v2018_2.buildSteps.maven
-import jetbrains.buildServer.configs.kotlin.v2018_2.triggers.vcs
+import jetbrains.buildServer.configs.kotlin.v2018_2.triggers.finishBuildTrigger
 import jetbrains.buildServer.configs.kotlin.v2018_2.vcs.GitVcsRoot
 
 /*
@@ -31,25 +29,49 @@ version = "2018.2"
 
 project {
     vcsRoot(PetclinicVcs)
-    buildType(Build)
+
+    sequence {
+        build(Build) {
+            produces("target/spring-petclinic-*.jar => spring-petclinic.zip")
+        }
+        build(Upload){
+            requires(Build, "spring-petclinic.zip")
+        }
+    }
 }
 
 object Build : BuildType({
     name = "Build"
-    artifactRules = "target/*jar"
 
     vcs {
         root(PetclinicVcs)
     }
+
     steps {
         maven {
             goals = "clean package"
             dockerImage = "maven:3.6.0-jdk-8"
         }
     }
+})
+
+object Upload : BuildType({
+    name = "Upload"
+
+    steps {
+        step {
+            type = "ftp-deploy-runner"
+            param("jetbrains.buildServer.deployer.ftp.authMethod", "ANONYMOUS")
+            param("jetbrains.buildServer.deployer.ftp.transferMethod", "AUTO")
+            param("jetbrains.buildServer.deployer.sourcePath", "spring-petclinic.zip")
+            param("jetbrains.buildServer.deployer.targetUrl", "some.host.com")
+            param("jetbrains.buildServer.deployer.ftp.securityMode", "0")
+        }
+    }
+
     triggers {
-        vcs {
-            branchFilter = "refs/heads/master"
+        finishBuildTrigger {
+            buildType = "${Build.id}"
         }
     }
 })
